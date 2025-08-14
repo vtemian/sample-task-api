@@ -41,7 +41,7 @@ src/
 ## Learn More
 
 - 📚 [Blueprints.md Documentation](https://github.com/vtemian/blueprints.md/)
-- 🚀 [Getting Started with Blueprints.md](https://github.com/vtemian/blueprints.md/#getting-started)
+- 🚀 [Getting Started with Blueprints.md](https://github.com/vtemian/blueprints.md/tree/main?tab=readme-ov-file#%EF%B8%8F-how-it-works---the-agentic-pipeline)
 - 💡 [Blueprints.md Examples](https://github.com/vtemian/blueprints.md/tree/main/examples)
 
 ## Benefits of Using Blueprints.md
