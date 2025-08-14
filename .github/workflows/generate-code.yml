@@ -1,0 +1,160 @@
+name: Generate Code from Blueprints
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**/*.md'
+      - '.github/workflows/generate-code.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Generate code from blueprints
+        uses: vtemian/blueprints-action@v1
+        with:
+          source_dir: 'src'
+          output_dir: 'generated'
+          file_pattern: '**/*.md'
+          
+      - name: Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+      
+      - name: Check if code branch exists
+        id: check_branch
+        run: |
+          if git ls-remote --heads origin code | grep -q 'refs/heads/code'; then
+            echo "branch_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "branch_exists=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create or checkout code branch
+        run: |
+          if [ "${{ steps.check_branch.outputs.branch_exists }}" == "true" ]; then
+            git fetch origin code
+            git checkout code
+            git merge main --no-edit --allow-unrelated-histories || true
+          else
+            git checkout -b code
+          fi
+      
+      - name: Copy generated files
+        run: |
+          # Remove old generated files if they exist
+          rm -rf task_api/
+          
+          # Create the task_api directory structure
+          mkdir -p task_api/api
+          mkdir -p task_api/core  
+          mkdir -p task_api/models
+          
+          # Copy generated Python files to appropriate structure
+          if [ -d "generated" ]; then
+            # Copy main app file
+            [ -f "generated/app.py" ] && cp generated/app.py task_api/app.py
+            
+            # Copy API files
+            [ -f "generated/api/tasks.py" ] && cp generated/api/tasks.py task_api/api/tasks.py
+            [ -f "generated/api/users.py" ] && cp generated/api/users.py task_api/api/users.py
+            
+            # Copy core files
+            [ -f "generated/core/auth.py" ] && cp generated/core/auth.py task_api/core/auth.py
+            [ -f "generated/core/database.py" ] && cp generated/core/database.py task_api/core/database.py
+            
+            # Copy model files
+            [ -f "generated/models/task.py" ] && cp generated/models/task.py task_api/models/task.py
+            [ -f "generated/models/user.py" ] && cp generated/models/user.py task_api/models/user.py
+            
+            # Create __init__ files
+            touch task_api/__init__.py
+            touch task_api/api/__init__.py
+            touch task_api/core/__init__.py
+            touch task_api/models/__init__.py
+          fi
+          
+          # Copy requirements files from blueprints if they exist
+          if grep -q "requirements.txt" src/main.md; then
+            cat > requirements.txt << 'EOF'
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+sqlalchemy==2.0.23
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+python-dotenv==1.0.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+EOF
+            
+            cat > requirements-dev.txt << 'EOF'
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+httpx==0.25.2
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.1
+EOF
+          fi
+      
+      - name: Commit and push changes
+        run: |
+          git add .
+          
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Generate code from blueprints
+            
+            Automated code generation from markdown blueprints.
+            Triggered by: ${{ github.event_name }}
+            Commit: ${{ github.sha }}"
+            
+            git push origin code --force
+          fi
+      
+      - name: Create PR if needed
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if PR already exists
+          existing_pr=$(gh pr list --base main --head code --state open --json number --jq '.[0].number')
+          
+          if [ -z "$existing_pr" ]; then
+            gh pr create \
+              --title "Update generated code from blueprints" \
+              --body "This PR contains the latest code generated from the markdown blueprints.
+              
+              **Automated by GitHub Actions** 
+              
+              - Source: Blueprint markdown files in \`src/\`
+              - Generated: Python code in \`task_api/\`
+              - Commit: ${{ github.sha }}
+              
+              Please review the generated code before merging." \
+              --base main \
+              --head code \
+              --label "automated,generated-code" || true
+          fi
