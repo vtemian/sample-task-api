@@ -50,8 +50,4 @@ src/
 - **Always Up-to-Date**: No more outdated docs
 - **AI-Friendly**: Perfect for AI-assisted development
 - **Version Control**: Track changes to both docs and implementation together
-- **Readable**: Markdown format is easy to read and write
-
-## License
-
-MIT
+- **Readable**: Markdown format is easy to read and write=
